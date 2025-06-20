@@ -270,6 +270,10 @@ docker-compose -f docker-compose.prod.yml exec open-webui bash
 3. **Scale**: Add more servers with load balancing if needed
 4. **Integrate**: Connect additional services (Redis, external databases)
 
+## 📝 Testing GitHub Actions Deployment
+
+The GitHub Actions workflow is configured and ready to deploy automatically on every push to main branch.
+
 ---
 
 **Enjoy your production Open WebUI deployment! 🚀**
