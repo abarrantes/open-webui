@@ -1,0 +1,127 @@
+version: '3.8'
+
+services:
+  open-webui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USE_OLLAMA: false
+        USE_CUDA: false
+    image: ${IMAGE_NAME:-open-webui}:${IMAGE_TAG:-latest}
+    container_name: open-webui-prod
+    restart: unless-stopped
+    
+    ports:
+      - "${PORT:-3000}:8080"
+    
+    environment:
+      # OpenAI Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-https://api.openai.com/v1}
+      - ENABLE_OPENAI_API=true
+      
+      # Disable Ollama since we're using OpenAI
+      - ENABLE_OLLAMA_API=false
+      - OLLAMA_BASE_URL=""
+      
+      # Security
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - WEBUI_AUTH=${WEBUI_AUTH:-true}
+      
+      # Application Settings
+      - WEBUI_NAME=${WEBUI_NAME:-Open WebUI}
+      - ENV=prod
+      - DEFAULT_MODELS=${DEFAULT_MODELS:-gpt-4,gpt-3.5-turbo}
+      
+      # Features (customize as needed)
+      - ENABLE_SIGNUP=${ENABLE_SIGNUP:-false}
+      - ENABLE_WEB_SEARCH=${ENABLE_WEB_SEARCH:-true}
+      - ENABLE_IMAGE_GENERATION=${ENABLE_IMAGE_GENERATION:-true}
+      - ENABLE_COMMUNITY_SHARING=${ENABLE_COMMUNITY_SHARING:-false}
+      
+      # Performance & Caching
+      - RAG_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      - CHUNK_SIZE=${CHUNK_SIZE:-1000}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-100}
+      
+      # Disable telemetry
+      - ANONYMIZED_TELEMETRY=false
+      - SCARF_NO_ANALYTICS=true
+      - DO_NOT_TRACK=true
+
+    volumes:
+      # Persistent data storage
+      - open-webui-data:/app/backend/data
+      # Optional: bind mount for custom configurations
+      # - ./config:/app/backend/data/config
+    
+    networks:
+      - open-webui-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Reverse proxy with SSL termination
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik-prod
+    restart: unless-stopped
+    
+    command:
+      # Traefik configuration
+      - "--api.dashboard=false"
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      
+      # Let's Encrypt configuration
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      
+      # Redirect HTTP to HTTPS
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt-data:/letsencrypt
+
+    networks:
+      - open-webui-network
+
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable=true"
+      
+      # Router for the main domain
+      - "traefik.http.routers.open-webui.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.open-webui.entrypoints=websecure"
+      - "traefik.http.routers.open-webui.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.open-webui.service=open-webui-service"
+      
+      # Service definition
+      - "traefik.http.services.open-webui-service.loadbalancer.server.port=8080"
+
+volumes:
+  open-webui-data:
+    driver: local
+  letsencrypt-data:
+    driver: local
+
+networks:
+  open-webui-network:
+    driver: bridge
