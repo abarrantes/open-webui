@@ -274,6 +274,8 @@ docker-compose -f docker-compose.prod.yml exec open-webui bash
 
 The GitHub Actions workflow is configured and ready to deploy automatically on every push to main branch.
 
+Testing SSH authentication fix for automated deployment.
+
 ---
 
 **Enjoy your production Open WebUI deployment! 🚀**
